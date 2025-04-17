@@ -1,6 +1,6 @@
 import secrets
 from typing import List, Union, Dict, Any, Optional
-from pydantic import AnyHttpUrl, PostgresDsn, field_validator
+from pydantic import AnyHttpUrl, PostgresDsn, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -23,26 +23,26 @@ class Settings(BaseSettings):
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
-    POSTGRES_PORT: str = "5432"
+    POSTGRES_PORT: int = 5432
     DATABASE_URI: Optional[PostgresDsn] = None
 
     @field_validator("DATABASE_URI", mode="before")
-    def assemble_db_connection(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
+    def assemble_db_connection(cls, v: Optional[str], info: ValidationInfo) -> Any:
         if isinstance(v, str):
             return v
-        
-        port = values.data.get("POSTGRES_PORT")
-        if port:
-            port = int(port)
 
-        return PostgresDsn.build(
-            scheme="postgresql",
-            username=values.data.get("POSTGRES_USER"),
-            password=values.data.get("POSTGRES_PASSWORD"),
-            host=values.data.get("POSTGRES_SERVER"),
-            port=port,
-            path=f"{values.data.get('POSTGRES_DB') or ''}",
-        )
+        uri = PostgresDsn.build(
+        scheme="postgresql",
+        username=info.data.get("POSTGRES_USER"),
+        password=info.data.get("POSTGRES_PASSWORD"),
+        host=info.data.get("POSTGRES_SERVER"),
+        port=info.data.get("POSTGRES_PORT"),
+        path=f"{info.data.get('POSTGRES_DB') or ''}",
+    )
+
+        return uri
+
+
     
     class Config:
         case_sensitive = True
