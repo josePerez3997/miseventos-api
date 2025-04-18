@@ -1,21 +1,21 @@
-from sqlalchemy import Boolean, Column, String, Integer, DateTime
+from sqlalchemy import Boolean, Column, String, Integer, DateTime, Enum
 from sqlalchemy.sql import func
+import enum
 
 from app.db.session import Base
 from app.db.base_class import CustomBase
 
+class UserRole(str, enum.Enum):
+    ADMIN = "ADMIN"
+    ORGANIZER = "ORGANIZER"
+    ATTENDEE = "ATTENDEE"
+
 class User(Base, CustomBase):
     """User model"""
-    email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
-    full_name = Column(String, nullable=False)
-    is_active = Column(Boolean, default=True)
-    is_superuser = Column(Boolean, default=False)
+    __tablename__ = "users"
     
-    # Roles: 1 = Admin, 2 = Organizer, 3 = Attendee
-    role = Column(Integer, default=3) 
-    
-    phone = Column(String, nullable=True)
-    bio = Column(String, nullable=True)
-    profile_image = Column(String, nullable=True)
-    last_login = Column(DateTime(timezone=True), nullable=True)
+    name = Column(String(100), nullable=False)
+    email = Column(String(100), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    role = Column(Enum(UserRole), nullable=False, default=UserRole.ATTENDEE)
+    image_url = Column(String(255), nullable=True)

@@ -1,36 +1,35 @@
 from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field
+from enum import Enum
+
+class UserRole(str, Enum):
+    ADMIN = "ADMIN"
+    ORGANIZER = "ORGANIZER"
+    ATTENDEE = "ATTENDEE"
 
 class UserBase(BaseModel):
     email: EmailStr
-    full_name: str = Field(..., min_length=1, max_length=100)
+    name: str = Field(..., min_length=1, max_length=100)
     is_active: bool = True
-    is_superuser: bool = False
-    role: int = 3
-    phone: Optional[str] = None
-    bio: Optional[str] = None
-    profile_image: Optional[str] = None
+    role: UserRole = UserRole.ATTENDEE
+    image_url: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6)
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
-    full_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
     password: Optional[str] = Field(None, min_length=6)
     is_active: Optional[bool] = None
-    is_superuser: Optional[bool] = None
-    role: Optional[int] = None
-    phone: Optional[str] = None
-    bio: Optional[str] = None
-    profile_image: Optional[str] = None
+    role: Optional[UserRole] = None
+    image_url: Optional[str] = None
 
 class UserInDB(UserBase):
     id: int
     created_at: datetime
     updated_at: datetime
-    last_login: Optional[datetime] = None
 
     class Config:
         from_attributes = True

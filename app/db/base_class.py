@@ -10,5 +10,8 @@ class CustomBase(BaseModel):
     
     @declared_attr
     def __tablename__(cls) -> str:
+        if hasattr(cls, "__tablename__") and cls.__tablename__ is not None:
+            return cls.__tablename__
+        
         name = re.sub('(?<!^)(?=[A-Z])', '_', cls.__name__).lower()
-        return name
+        return f"{name}s"
