@@ -9,7 +9,6 @@ class EventStatus(str, Enum):
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
 
-# Esquema base para evento (campos comunes)
 class EventBase(BaseModel):
     name: str = Field(..., min_length=5, max_length=100)
     description: str = Field(..., min_length=20)
