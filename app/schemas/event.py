@@ -67,8 +67,27 @@ class EventPage(BaseModel):
 class EventSearchParams(BaseModel):
     search: Optional[str] = None
     status: Optional[EventStatus] = None
-    category: Optional[str] = None
+    location: Optional[str] = None
+    organizer_id: Optional[int] = None
     date_from: Optional[datetime] = None
     date_to: Optional[datetime] = None
+    min_capacity: Optional[int] = None
+    max_capacity: Optional[int] = None
+    has_available_spots: Optional[bool] = None
+    sort_by: Optional[str] = "date"  
+    sort_order: Optional[str] = "asc"  
     page: int = 1
     size: int = 10
+
+    @validator('sort_by')
+    def validate_sort_by(cls, v):
+        allowed_sort_fields = ['date', 'name', 'popularity', 'capacity']
+        if v and v not in allowed_sort_fields:
+            raise ValueError(f'sort_by must be one of {allowed_sort_fields}')
+        return v
+
+    @validator('sort_order')
+    def validate_sort_order(cls, v):
+        if v and v not in ['asc', 'desc']:
+            raise ValueError('sort_order must be either "asc" or "desc"')
+        return v

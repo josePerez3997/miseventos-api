@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, desc, func
 from sqlalchemy.orm import Session
 
 from app.models.event import Event, EventStatus
@@ -25,7 +25,7 @@ class EventRepository(BaseRepository[Event, EventCreate, EventUpdate]):
         user_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
-        Search events with filters
+        Search events with advanced filters
         """
         query = db.query(Event)
         
@@ -42,22 +42,53 @@ class EventRepository(BaseRepository[Event, EventCreate, EventUpdate]):
         if params.status:
             query = query.filter(Event.status == params.status)
         
+        if params.location:
+            query = query.filter(Event.location.ilike(f"%{params.location}%"))
+        
+        if params.organizer_id:
+            query = query.filter(Event.organizer_id == params.organizer_id)
+        elif user_id:
+            query = query.filter(Event.organizer_id == user_id)
+        
         if params.date_from:
             query = query.filter(Event.date >= params.date_from)
         
         if params.date_to:
             query = query.filter(Event.date <= params.date_to)
         
-        if user_id:
-            query = query.filter(Event.organizer_id == user_id)
+        if params.min_capacity:
+            query = query.filter(Event.capacity >= params.min_capacity)
+        
+        if params.max_capacity:
+            query = query.filter(Event.capacity <= params.max_capacity)
+        
+        if params.has_available_spots:
+            query = query.filter(Event.registered_attendees < Event.capacity)
         
         total = query.count()
+        
+        if params.sort_by:
+            sort_field_map = {
+                'date': Event.date,
+                'name': Event.name,
+                'popularity': Event.registered_attendees,
+                'capacity': Event.capacity
+            }
+            
+            sort_field = sort_field_map.get(params.sort_by, Event.date)
+            
+            if params.sort_order and params.sort_order.lower() == 'desc':
+                query = query.order_by(desc(sort_field))
+            else:
+                query = query.order_by(sort_field)
+        else:
+            query = query.order_by(Event.date)
         
         pages = (total + params.size - 1) // params.size if total > 0 else 0
         page = min(params.page, pages) if pages > 0 else 1
         skip = (page - 1) * params.size
         
-        events = query.order_by(Event.date).offset(skip).limit(params.size).all()
+        events = query.offset(skip).limit(params.size).all()
         
         return {
             "items": events,

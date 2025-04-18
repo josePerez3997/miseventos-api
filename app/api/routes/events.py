@@ -16,19 +16,53 @@ router = APIRouter()
 def get_events(
     search: Optional[str] = None,
     status: Optional[EventStatus] = None,
-    category: Optional[str] = None,
+    location: Optional[str] = None,
+    organizer_id: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    min_capacity: Optional[int] = None,
+    max_capacity: Optional[int] = None,
+    has_available_spots: Optional[bool] = None,
+    sort_by: Optional[str] = "date",
+    sort_order: Optional[str] = "asc",
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=100),
     current_user: Optional[User] = Depends(get_optional_current_user),
     event_service: EventService = Depends(),
 ):
     """
-    Get events with optional filters
+    Get events with advanced search filters
+    
+    - **search**: Search in name, description, and location
+    - **status**: Filter by event status (UPCOMING, ONGOING, COMPLETED, CANCELLED)
+    - **location**: Filter by location (partial match)
+    - **organizer_id**: Filter by organizer ID
+    - **date_from**: Filter events starting from this date (ISO format)
+    - **date_to**: Filter events up to this date (ISO format)
+    - **min_capacity**: Filter by minimum capacity
+    - **max_capacity**: Filter by maximum capacity
+    - **has_available_spots**: Filter for events that have spots available
+    - **sort_by**: Sort by field (date, name, popularity, capacity)
+    - **sort_order**: Sort order (asc, desc)
+    - **page**: Page number (starts at 1)
+    - **size**: Page size (items per page)
     """
+    from datetime import datetime
+    parsed_date_from = datetime.fromisoformat(date_from) if date_from else None
+    parsed_date_to = datetime.fromisoformat(date_to) if date_to else None
+    
     params = EventSearchParams(
         search=search,
         status=status,
-        category=category,
+        location=location,
+        organizer_id=organizer_id,
+        date_from=parsed_date_from,
+        date_to=parsed_date_to,
+        min_capacity=min_capacity,
+        max_capacity=max_capacity,
+        has_available_spots=has_available_spots,
+        sort_by=sort_by,
+        sort_order=sort_order,
         page=page,
         size=size
     )
