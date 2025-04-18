@@ -1,6 +1,6 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, status
 
 from app.api.dependencies.auth import get_current_active_user, get_optional_current_user
 from app.models.user import User
@@ -107,6 +107,26 @@ def get_registered_events(
     events = event_service.get_user_registered_events(user_id=current_user.id)
     return events
 
+@router.get("/upcoming-stats", response_model=Dict[str, Any])
+def get_upcoming_events_stats(
+    days: int = Query(30, ge=1, le=365),
+    event_service: EventService = Depends(),
+):
+    """
+    Get statistics for upcoming events in the next X days
+    """
+    return event_service.get_upcoming_events_stats(days=days)
+
+@router.get("/my-stats", response_model=Dict[str, Any])
+def get_my_events_stats(
+    current_user: User = Depends(get_current_active_user),
+    event_service: EventService = Depends(),
+):
+    """
+    Get statistics for events organized by the current user
+    """
+    return event_service.get_organizer_event_stats(organizer_id=current_user.id)
+
 @router.get("/{event_id}", response_model=EventWithOrganizer)
 def get_event(
     event_id: int,
@@ -123,6 +143,23 @@ def get_event(
             detail="Event not found",
         )
     return event
+
+@router.get("/{event_id}/stats", response_model=Dict[str, Any])
+def get_event_stats(
+    event_id: int,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    event_service: EventService = Depends(),
+):
+    """
+    Get detailed statistics for an event
+    """
+    stats = event_service.get_event_stats(event_id=event_id)
+    if not stats:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found",
+        )
+    return stats
 
 @router.put("/{event_id}", response_model=Event)
 def update_event(

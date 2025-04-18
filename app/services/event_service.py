@@ -1,7 +1,8 @@
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import Depends, HTTPException, status
+from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.db import get_database
@@ -252,3 +253,158 @@ class EventService:
         )
         
         return registration is not None
+    
+    
+    def get_event_stats(self, event_id: int) -> Dict[str, Any]:
+        """
+        Get detailed statistics for a single event
+        """
+        event = self.get_event(event_id)
+        if not event:
+            return {}
+        
+        basic_info = {
+            "id": event.id,
+            "name": event.name,
+            "date": event.date,
+            "status": event.status,
+            "registered_attendees": event.registered_attendees,
+            "capacity": event.capacity,
+            "occupation_percentage": round((event.registered_attendees / event.capacity) * 100, 2) if event.capacity > 0 else 0
+        }
+        
+        registrations = (
+            self.db.query(
+                func.date(EventAttendee.registered_at).label('date'),
+                func.count().label('count')
+            )
+            .filter(EventAttendee.event_id == event_id)
+            .group_by(func.date(EventAttendee.registered_at))
+            .order_by(func.date(EventAttendee.registered_at))
+            .all()
+        )
+        
+        registrations_by_day = [
+            {"date": reg.date, "count": reg.count}
+            for reg in registrations
+        ]
+        
+        from app.models.session import Session as EventSession
+        
+        popular_sessions = (
+            self.db.query(
+                EventSession.id,
+                EventSession.title,
+                EventSession.start_time,
+                EventSession.end_time,
+                EventSession.registered_attendees,
+                EventSession.capacity
+            )
+            .filter(EventSession.event_id == event_id)
+            .order_by(desc(EventSession.registered_attendees))
+            .all()
+        )
+        
+        popular_sessions_data = [
+            {
+                "id": session.id,
+                "title": session.title,
+                "start_time": session.start_time,
+                "end_time": session.end_time,
+                "registered_attendees": session.registered_attendees,
+                "capacity": session.capacity,
+                "occupation_percentage": round((session.registered_attendees / session.capacity) * 100, 2) if session.capacity > 0 else 0
+            }
+            for session in popular_sessions
+        ]
+        
+        return {
+            "basic_info": basic_info,
+            "registrations_by_day": registrations_by_day,
+            "popular_sessions": popular_sessions_data,
+            "total_sessions": len(popular_sessions)
+        }
+    
+    def get_upcoming_events_stats(self, days: int = 30) -> Dict[str, Any]:
+        """
+        Get statistics for upcoming events in the next X days
+        """
+        now = datetime.now()
+        end_date = now + timedelta(days=days)
+        
+        upcoming_events = (
+            self.db.query(Event)
+            .filter(
+                Event.date >= now,
+                Event.date <= end_date,
+                Event.status == EventStatus.UPCOMING
+            )
+            .order_by(Event.date)
+            .all()
+        )
+        
+        events_data = [
+            {
+                "id": event.id,
+                "name": event.name,
+                "date": event.date,
+                "days_until_start": (event.date.date() - now.date()).days,
+                "registered_attendees": event.registered_attendees,
+                "capacity": event.capacity,
+                "occupation_percentage": round((event.registered_attendees / event.capacity) * 100, 2) if event.capacity > 0 else 0
+            }
+            for event in upcoming_events
+        ]
+        
+        total_capacity = sum(event.capacity for event in upcoming_events)
+        total_registered = sum(event.registered_attendees for event in upcoming_events)
+        
+        return {
+            "upcoming_events": events_data,
+            "total_upcoming_events": len(upcoming_events),
+            "total_capacity": total_capacity,
+            "total_registered": total_registered,
+            "overall_occupation_percentage": round((total_registered / total_capacity) * 100, 2) if total_capacity > 0 else 0,
+            "period_days": days,
+            "start_date": now,
+            "end_date": end_date
+        }
+    
+    def get_organizer_event_stats(self, organizer_id: int) -> Dict[str, Any]:
+        """
+        Get statistics for events organized by a specific user
+        """
+        events = self.get_events_by_organizer(organizer_id)
+        
+        events_by_status = {}
+        for status in EventStatus:
+            count = sum(1 for event in events if event.status == status)
+            events_by_status[status] = count
+        
+        sorted_events = sorted(events, key=lambda e: e.registered_attendees, reverse=True)
+        top_events = sorted_events[:5]
+        
+        top_events_data = [
+            {
+                "id": event.id,
+                "name": event.name,
+                "date": event.date,
+                "status": event.status,
+                "registered_attendees": event.registered_attendees,
+                "capacity": event.capacity,
+                "occupation_percentage": round((event.registered_attendees / event.capacity) * 100, 2) if event.capacity > 0 else 0
+            }
+            for event in top_events
+        ]
+        
+        total_attendees = sum(event.registered_attendees for event in events)
+        total_capacity = sum(event.capacity for event in events)
+        
+        return {
+            "total_events": len(events),
+            "events_by_status": events_by_status,
+            "top_events": top_events_data,
+            "total_attendees": total_attendees,
+            "total_capacity": total_capacity,
+            "overall_occupation_percentage": round((total_attendees / total_capacity) * 100, 2) if total_capacity > 0 else 0
+        }
