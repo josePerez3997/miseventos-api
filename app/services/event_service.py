@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.db import get_database
@@ -10,13 +10,19 @@ from app.repositories.user_repository import user_repository
 from app.models.event import Event, EventStatus
 from app.schemas.event import EventCreate, EventUpdate, EventSearchParams
 from app.models.event_attendee import EventAttendee
+from app.services.validation_service import ValidationService
 
 class EventService:
     """
     Service for event related operations
     """
-    def __init__(self, db: Session = Depends(get_database)):
+    def __init__(
+        self, 
+        db: Session = Depends(get_database),
+        validation_service: ValidationService = Depends()
+    ):
         self.db = db
+        self.validation_service = validation_service
     
     def get_event(self, event_id: int) -> Optional[Event]:
         """
@@ -51,34 +57,68 @@ class EventService:
     
     def create_event(self, event_in: EventCreate, organizer_id: int) -> Event:
         """
-        Create a new event
+        Create a new event with validations
+        
+        Raises:
+        - HTTPException: If validation fails
         """
         event_data = event_in.model_dump()
         event_data["organizer_id"] = organizer_id
         event_data["registered_attendees"] = 0
         
+        user = user_repository.get(self.db, id=organizer_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuario no encontrado"
+            )
+        
+        is_valid, error_msg = self.validation_service.validate_event_create(event_data, user)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_msg
+            )
+        
         return event_repository.create(self.db, obj_in=event_data)
     
     def update_event(self, event_id: int, event_in: EventUpdate, user_id: int) -> Optional[Event]:
         """
-        Update an event if user is the organizer
+        Update an event with validations
+        
+        Raises:
+        - HTTPException: If validation fails
         """
+        update_data = event_in.model_dump(exclude_unset=True)
+        
+        user = user_repository.get(self.db, id=user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuario no encontrado"
+            )
+        
+        is_valid, error_msg = self.validation_service.validate_event_update(
+            event_id, update_data, user
+        )
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_msg
+            )
+        
         event = self.get_event(event_id)
         if not event:
             return None
         
-        user = user_repository.get(self.db, id=user_id)
-        if not user:
-            return None
-            
-        if event.organizer_id != user_id and user.role != "ADMIN":
-            return None
-        
-        return event_repository.update(self.db, db_obj=event, obj_in=event_in)
+        return event_repository.update(self.db, db_obj=event, obj_in=update_data)
     
     def delete_event(self, event_id: int, user_id: int) -> bool:
         """
-        Delete an event if user is the organizer
+        Delete an event if user is the organizer or admin
+        
+        Raises:
+        - HTTPException: If validation fails
         """
         event = self.get_event(event_id)
         if not event:
@@ -90,23 +130,31 @@ class EventService:
             
         if event.organizer_id != user_id and user.role != "ADMIN":
             return False
+        
+        if event.status != EventStatus.UPCOMING or event.registered_attendees > 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No se puede eliminar un evento que ya ha comenzado o tiene asistentes registrados"
+            )
         
         event_repository.remove(self.db, id=event_id)
         return True
     
     def register_for_event(self, event_id: int, user_id: int) -> bool:
         """
-        Register a user for an event
+        Register a user for an event with validations
+        
+        Raises:
+        - HTTPException: If validation fails
         """
-        event = self.get_event(event_id)
-        if not event:
-            return False
-        
-        if event.status != EventStatus.UPCOMING and event.status != EventStatus.ONGOING:
-            return False
-        
-        if event.registered_attendees >= event.capacity:
-            return False
+        is_valid, error_msg = self.validation_service.validate_user_registration(
+            event_id, user_id
+        )
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_msg
+            )
         
         existing_registration = (
             self.db.query(EventAttendee)
@@ -118,7 +166,7 @@ class EventService:
         )
         
         if existing_registration:
-            return True  
+            return True
         
         registration = EventAttendee(
             event_id=event_id,
@@ -134,14 +182,19 @@ class EventService:
     
     def unregister_from_event(self, event_id: int, user_id: int) -> bool:
         """
-        Unregister a user from an event
-        """
-        event = self.get_event(event_id)
-        if not event:
-            return False
+        Unregister a user from an event with validations
         
-        if event.status != EventStatus.UPCOMING and event.status != EventStatus.ONGOING:
-            return False
+        Raises:
+        - HTTPException: If validation fails
+        """
+        is_valid, error_msg = self.validation_service.validate_user_unregistration(
+            event_id, user_id
+        )
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_msg
+            )
         
         registration = (
             self.db.query(EventAttendee)
