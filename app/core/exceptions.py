@@ -54,3 +54,15 @@ class ConflictException(MisEventosException):
             status_code=status.HTTP_409_CONFLICT,
             detail=detail,
         )
+
+class EmailAlreadyRegisteredError(ConflictException):
+    def __init__(self):
+        super().__init__(detail="Email already registered")
+
+class UserNotFoundError(NotFoundException):
+    def __init__(self):
+        super().__init__(detail="User not found")
+
+class InvalidPasswordError(BadRequestException):
+    def __init__(self):
+        super().__init__(detail="Invalid password")
