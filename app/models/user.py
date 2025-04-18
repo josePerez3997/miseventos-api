@@ -5,6 +5,8 @@ import enum
 from app.db.session import Base
 from app.db.base_class import CustomBase
 
+from sqlalchemy.orm import relationship
+
 class UserRole(str, enum.Enum):
     ADMIN = "ADMIN"
     ORGANIZER = "ORGANIZER"
@@ -19,3 +21,6 @@ class User(Base, CustomBase):
     password_hash = Column(String(255), nullable=False)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.ATTENDEE)
     image_url = Column(String(255), nullable=True)
+
+    organized_events = relationship("Event", back_populates="organizer")
+    attended_events = relationship("EventAttendee", back_populates="user")
