@@ -1,9 +1,10 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from sqlalchemy import or_, and_, desc, func
-from sqlalchemy.orm import Session
-
+from sqlalchemy.orm import Session, joinedload
+from typing import Union
 from app.models.event import Event, EventStatus
+from app.models.category import Category, event_category
 from app.schemas.event import EventCreate, EventUpdate, EventSearchParams
 from app.repositories.base import BaseRepository
 
@@ -17,6 +18,12 @@ class EventRepository(BaseRepository[Event, EventCreate, EventUpdate]):
         """
         return db.query(Event).filter(Event.organizer_id == organizer_id).all()
     
+    def get(self, db: Session, id: Any) -> Optional[Event]:
+        """
+        Get an event by ID with categories loaded
+        """
+        return db.query(Event).options(joinedload(Event.categories)).filter(Event.id == id).first()
+    
     def search(
         self, 
         db: Session, 
@@ -25,9 +32,9 @@ class EventRepository(BaseRepository[Event, EventCreate, EventUpdate]):
         user_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
-        Search events with advanced filters
+        Search events with advanced filters including categories
         """
-        query = db.query(Event)
+        query = db.query(Event).options(joinedload(Event.categories))
         
         if params.search:
             search_term = f"%{params.search}%"
@@ -49,6 +56,14 @@ class EventRepository(BaseRepository[Event, EventCreate, EventUpdate]):
             query = query.filter(Event.organizer_id == params.organizer_id)
         elif user_id:
             query = query.filter(Event.organizer_id == user_id)
+            
+        if params.category_id:
+            query = query.join(event_category).join(Category).filter(Category.id == params.category_id)
+            
+        if params.category_ids and len(params.category_ids) > 0:
+            for category_id in params.category_ids:
+                subquery = db.query(event_category.c.event_id).filter(event_category.c.category_id == category_id).scalar_subquery()
+                query = query.filter(Event.id.in_(subquery))
         
         if params.date_from:
             query = query.filter(Event.date >= params.date_from)
@@ -97,6 +112,53 @@ class EventRepository(BaseRepository[Event, EventCreate, EventUpdate]):
             "size": params.size,
             "pages": pages
         }
+    
+    def create(self, db: Session, *, obj_in: Dict[str, Any]) -> Event:
+        """
+        Create a new event with categories
+        """
+        category_ids = obj_in.pop("category_ids", []) or []
+        
+        db_obj = self.model(**obj_in)
+        
+        if category_ids:
+            categories = db.query(Category).filter(Category.id.in_(category_ids)).all()
+            db_obj.categories = categories
+            
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
+    
+    def update(
+        self,
+        db: Session,
+        *,
+        db_obj: Event,
+        obj_in: Union[EventUpdate, Dict[str, Any]]
+    ) -> Event:
+        """
+        Update an event including categories
+        """
+        if isinstance(obj_in, dict):
+            update_data = obj_in
+        else:
+            update_data = obj_in.model_dump(exclude_unset=True)
+            
+        category_ids = update_data.pop("category_ids", None)
+        
+        for field in update_data:
+            if field != "categories" and field in update_data:
+                setattr(db_obj, field, update_data[field])
+                
+        if category_ids is not None:
+            categories = db.query(Category).filter(Category.id.in_(category_ids)).all()
+            db_obj.categories = categories
+            
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
     
     def register_attendee(self, db: Session, *, event_id: int) -> bool:
         """
@@ -157,6 +219,17 @@ class EventRepository(BaseRepository[Event, EventCreate, EventUpdate]):
         ).update({Event.status: EventStatus.COMPLETED}, synchronize_session=False)
         
         db.commit()
+        
+    def get_events_by_category(self, db: Session, *, category_id: int) -> List[Event]:
+        """
+        Get events by category ID
+        """
+        return (
+            db.query(Event)
+            .join(event_category)
+            .filter(event_category.c.category_id == category_id)
+            .all()
+        )
 
 
 event_repository = EventRepository(Event)

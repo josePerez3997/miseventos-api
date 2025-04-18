@@ -18,6 +18,7 @@ class EventBase(BaseModel):
     capacity: int = Field(..., gt=0, le=10000)
     status: EventStatus = EventStatus.UPCOMING
     image_url: Optional[str] = None
+    category_ids: Optional[List[int]] = []
 
     @validator('end_date')
     def end_date_after_start_date(cls, v, values):
@@ -37,6 +38,7 @@ class EventUpdate(BaseModel):
     capacity: Optional[int] = Field(None, gt=0, le=10000)
     status: Optional[EventStatus] = None
     image_url: Optional[str] = None
+    category_ids: Optional[List[int]] = None
 
     @validator('end_date')
     def end_date_after_start_date(cls, v, values):
@@ -44,12 +46,21 @@ class EventUpdate(BaseModel):
             raise ValueError('end_date must be after start date')
         return v
 
+class CategorySummary(BaseModel):
+    id: int
+    name: str
+    color: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 class Event(EventBase):
     id: int
     registered_attendees: int
     organizer_id: int
     created_at: datetime
     updated_at: datetime
+    categories: List[CategorySummary] = []
 
     class Config:
         from_attributes = True
@@ -69,13 +80,15 @@ class EventSearchParams(BaseModel):
     status: Optional[EventStatus] = None
     location: Optional[str] = None
     organizer_id: Optional[int] = None
+    category_id: Optional[int] = None  # Filter by category ID
+    category_ids: Optional[List[int]] = None  # Filter by multiple category IDs
     date_from: Optional[datetime] = None
     date_to: Optional[datetime] = None
     min_capacity: Optional[int] = None
     max_capacity: Optional[int] = None
     has_available_spots: Optional[bool] = None
-    sort_by: Optional[str] = "date"  
-    sort_order: Optional[str] = "asc"  
+    sort_by: Optional[str] = "date"  # Options: date, name, popularity
+    sort_order: Optional[str] = "asc"  # Options: asc, desc
     page: int = 1
     size: int = 10
 
