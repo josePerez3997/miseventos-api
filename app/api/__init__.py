@@ -1,12 +1,13 @@
 from fastapi import APIRouter
 
 from app.core.config import settings
-from app.api.routes import auth, users
+from app.api.routes import auth, users, events
 
 api_router = APIRouter(prefix=settings.API_V1_STR)
 
 api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
+api_router.include_router(events.router, prefix="/events", tags=["events"])
 
 @api_router.get("/health-check")
 def health_check():

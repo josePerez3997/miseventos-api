@@ -1,6 +1,5 @@
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Enum, Text
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 from enum import Enum as PyEnum
 
 from app.db.session import Base
@@ -29,5 +28,7 @@ class Event(Base, CustomBase):
     organizer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     
     organizer = relationship("User", back_populates="organized_events")
+    
     sessions = relationship("Session", back_populates="event", cascade="all, delete-orphan")
+    
     attendees = relationship("EventAttendee", back_populates="event", cascade="all, delete-orphan")

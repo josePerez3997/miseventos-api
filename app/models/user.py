@@ -24,3 +24,4 @@ class User(Base, CustomBase):
 
     organized_events = relationship("Event", back_populates="organizer")
     attended_events = relationship("EventAttendee", back_populates="user")
+    session_attendees = relationship("SessionAttendee", back_populates="user")
