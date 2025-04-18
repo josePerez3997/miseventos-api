@@ -34,3 +34,5 @@ class Event(Base, CustomBase):
     organizer = relationship("User", back_populates="organized_events")
     sessions = relationship("Session", back_populates="event", cascade="all, delete-orphan")
     attendees = relationship("EventAttendee", back_populates="event", cascade="all, delete-orphan")
+    
+    categories = relationship("Category", secondary="event_categories", back_populates="events")

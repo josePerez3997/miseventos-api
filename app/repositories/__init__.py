@@ -4,3 +4,4 @@ from app.repositories.event_repository import EventRepository, event_repository
 from app.repositories.speaker_repository import SpeakerRepository, speaker_repository
 from app.repositories.session_repository import SessionRepository, session_repository
 from app.repositories.session_attendee_repository import SessionAttendeeRepository, session_attendee_repository
+from app.repositories.category_repository import CategoryRepository, category_repository

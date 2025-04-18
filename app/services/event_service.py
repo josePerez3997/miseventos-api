@@ -30,7 +30,14 @@ class EventService:
         user_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
-        Get events with optional filters
+        Get events with advanced filters
+        
+        Parameters:
+        - params: EventSearchParams with all search filters
+        - user_id: Optional user ID to filter events by organizer
+        
+        Returns:
+        - Dictionary with paginated results and metadata
         """
         event_repository.update_status(self.db)
         
