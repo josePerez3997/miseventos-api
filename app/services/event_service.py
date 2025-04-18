@@ -1,8 +1,7 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, timedelta
 
 from fastapi import Depends, HTTPException, status
-from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.db import get_database
@@ -46,8 +45,10 @@ class EventService:
         Returns:
         - Dictionary with paginated results and metadata
         """
+        # Update event statuses before searching
         event_repository.update_status(self.db)
         
+        # Perform search with all parameters
         return event_repository.search(self.db, params=params, user_id=user_id)
     
     def get_events_by_organizer(self, organizer_id: int) -> List[Event]:
@@ -63,10 +64,12 @@ class EventService:
         Raises:
         - HTTPException: If validation fails
         """
+        # Convertir esquema a diccionario
         event_data = event_in.model_dump()
         event_data["organizer_id"] = organizer_id
         event_data["registered_attendees"] = 0
         
+        # Obtener usuario organizador para validaciones
         user = user_repository.get(self.db, id=organizer_id)
         if not user:
             raise HTTPException(
@@ -74,6 +77,7 @@ class EventService:
                 detail="Usuario no encontrado"
             )
         
+        # Validar datos del evento
         is_valid, error_msg = self.validation_service.validate_event_create(event_data, user)
         if not is_valid:
             raise HTTPException(
@@ -81,17 +85,34 @@ class EventService:
                 detail=error_msg
             )
         
+        # Crear evento
         return event_repository.create(self.db, obj_in=event_data)
     
-    def update_event(self, event_id: int, event_in: EventUpdate, user_id: int) -> Optional[Event]:
+    def update_event(
+        self, 
+        event_id: int, 
+        event_in: Union[EventUpdate, Dict[str, Any]], 
+        user_id: int
+    ) -> Optional[Event]:
         """
         Update an event with validations
+        
+        Parameters:
+        - event_id: ID of the event to update
+        - event_in: EventUpdate object or dictionary with fields to update
+        - user_id: ID of the user attempting to update
         
         Raises:
         - HTTPException: If validation fails
         """
-        update_data = event_in.model_dump(exclude_unset=True)
+        # Convertir a diccionario si es un objeto Pydantic
+        if hasattr(event_in, 'model_dump'):
+            update_data = event_in.model_dump(exclude_unset=True)
+        else:
+            # Si ya es un diccionario, usarlo directamente
+            update_data = event_in
         
+        # Obtener usuario para validaciones
         user = user_repository.get(self.db, id=user_id)
         if not user:
             raise HTTPException(
@@ -99,6 +120,7 @@ class EventService:
                 detail="Usuario no encontrado"
             )
         
+        # Validar actualización
         is_valid, error_msg = self.validation_service.validate_event_update(
             event_id, update_data, user
         )
@@ -108,10 +130,12 @@ class EventService:
                 detail=error_msg
             )
         
+        # Obtener evento para actualizar
         event = self.get_event(event_id)
         if not event:
             return None
         
+        # Actualizar evento
         return event_repository.update(self.db, db_obj=event, obj_in=update_data)
     
     def delete_event(self, event_id: int, user_id: int) -> bool:
@@ -129,9 +153,11 @@ class EventService:
         if not user:
             return False
             
+        # Verificar permisos
         if event.organizer_id != user_id and user.role != "ADMIN":
             return False
         
+        # No permitir eliminar eventos que ya han comenzado o tienen asistentes
         if event.status != EventStatus.UPCOMING or event.registered_attendees > 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -148,6 +174,7 @@ class EventService:
         Raises:
         - HTTPException: If validation fails
         """
+        # Validar registro
         is_valid, error_msg = self.validation_service.validate_user_registration(
             event_id, user_id
         )
@@ -157,6 +184,7 @@ class EventService:
                 detail=error_msg
             )
         
+        # Verificar si ya está registrado
         existing_registration = (
             self.db.query(EventAttendee)
             .filter(
@@ -169,6 +197,7 @@ class EventService:
         if existing_registration:
             return True
         
+        # Crear registro
         registration = EventAttendee(
             event_id=event_id,
             user_id=user_id
@@ -176,6 +205,7 @@ class EventService:
         
         self.db.add(registration)
         
+        # Incrementar contador de asistentes
         event_repository.register_attendee(self.db, event_id=event_id)
         
         self.db.commit()
@@ -188,6 +218,7 @@ class EventService:
         Raises:
         - HTTPException: If validation fails
         """
+        # Validar baja de registro
         is_valid, error_msg = self.validation_service.validate_user_unregistration(
             event_id, user_id
         )
@@ -197,6 +228,7 @@ class EventService:
                 detail=error_msg
             )
         
+        # Verificar si está registrado
         registration = (
             self.db.query(EventAttendee)
             .filter(
@@ -209,8 +241,10 @@ class EventService:
         if not registration:
             return False
         
+        # Eliminar registro
         self.db.delete(registration)
         
+        # Decrementar contador de asistentes
         event_repository.unregister_attendee(self.db, event_id=event_id)
         
         self.db.commit()
@@ -254,6 +288,7 @@ class EventService:
         
         return registration is not None
     
+    # Métodos de métricas
     
     def get_event_stats(self, event_id: int) -> Dict[str, Any]:
         """
@@ -263,6 +298,7 @@ class EventService:
         if not event:
             return {}
         
+        # Información básica del evento
         basic_info = {
             "id": event.id,
             "name": event.name,
@@ -273,6 +309,7 @@ class EventService:
             "occupation_percentage": round((event.registered_attendees / event.capacity) * 100, 2) if event.capacity > 0 else 0
         }
         
+        # Registros por día
         registrations = (
             self.db.query(
                 func.date(EventAttendee.registered_at).label('date'),
@@ -289,7 +326,9 @@ class EventService:
             for reg in registrations
         ]
         
+        # Sesiones más populares
         from app.models.session import Session as EventSession
+        from sqlalchemy import func, desc
         
         popular_sessions = (
             self.db.query(
@@ -332,6 +371,7 @@ class EventService:
         now = datetime.now()
         end_date = now + timedelta(days=days)
         
+        # Eventos próximos
         upcoming_events = (
             self.db.query(Event)
             .filter(
@@ -356,6 +396,7 @@ class EventService:
             for event in upcoming_events
         ]
         
+        # Estadísticas agregadas
         total_capacity = sum(event.capacity for event in upcoming_events)
         total_registered = sum(event.registered_attendees for event in upcoming_events)
         
@@ -374,13 +415,16 @@ class EventService:
         """
         Get statistics for events organized by a specific user
         """
+        # Todos los eventos del organizador
         events = self.get_events_by_organizer(organizer_id)
         
+        # Eventos por estado
         events_by_status = {}
         for status in EventStatus:
             count = sum(1 for event in events if event.status == status)
             events_by_status[status] = count
         
+        # Eventos más populares
         sorted_events = sorted(events, key=lambda e: e.registered_attendees, reverse=True)
         top_events = sorted_events[:5]
         
@@ -397,6 +441,7 @@ class EventService:
             for event in top_events
         ]
         
+        # Estadísticas agregadas
         total_attendees = sum(event.registered_attendees for event in events)
         total_capacity = sum(event.capacity for event in events)
         

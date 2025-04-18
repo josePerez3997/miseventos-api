@@ -1,4 +1,4 @@
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 from datetime import datetime
 from pydantic import BaseModel, Field, validator
 from enum import Enum
@@ -8,6 +8,16 @@ class EventStatus(str, Enum):
     ONGOING = "ONGOING"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
+
+class OrganizerSummary(BaseModel):
+    """Resumen del organizador para evitar serialización circular"""
+    id: int
+    name: str
+    email: str
+    role: str
+    
+    class Config:
+        from_attributes = True
 
 class EventBase(BaseModel):
     name: str = Field(..., min_length=5, max_length=100)
@@ -66,7 +76,10 @@ class Event(EventBase):
         from_attributes = True
 
 class EventWithOrganizer(Event):
-    organizer: Optional[Any] = None
+    organizer: Optional[OrganizerSummary] = None
+
+    class Config:
+        from_attributes = True
 
 class EventPage(BaseModel):
     items: List[Event]
