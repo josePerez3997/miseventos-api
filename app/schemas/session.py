@@ -44,9 +44,31 @@ class Session(SessionBase):
 
     class Config:
         from_attributes = True
+        arbitrary_types_allowed = True
+        # Permitir conversión de modelos SQLAlchemy
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }
+
+class SpeakerBase(BaseModel):
+    id: int
+    name: str
+    bio: Optional[str] = None
+    image_url: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
 
 class SessionWithSpeaker(Session):
-    speaker: Optional[Any] = None 
+    speaker: Optional[SpeakerBase] = None
+    
+    class Config:
+        from_attributes = True
+        arbitrary_types_allowed = True
 
 class SessionDetail(SessionWithSpeaker):
-    event: Optional[Any] = None 
+    event: Optional[Any] = None
+    
+    class Config:
+        from_attributes = True
+        arbitrary_types_allowed = True
