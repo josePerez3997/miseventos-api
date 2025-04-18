@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Enum as SQLAlchemyEnum
 from sqlalchemy.orm import relationship
 from enum import Enum as PyEnum
 
@@ -22,13 +22,15 @@ class Event(Base, CustomBase):
     end_date = Column(DateTime, nullable=True)
     capacity = Column(Integer, nullable=False)
     registered_attendees = Column(Integer, default=0)
-    status = Column(String, nullable=False, default=EventStatus.UPCOMING)
+    
+    status = Column(SQLAlchemyEnum(EventStatus, name="event_status", native_enum=True), 
+                   nullable=False, 
+                   default=EventStatus.UPCOMING)
+                   
     image_url = Column(String(255), nullable=True)
     
     organizer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     
     organizer = relationship("User", back_populates="organized_events")
-    
     sessions = relationship("Session", back_populates="event", cascade="all, delete-orphan")
-    
     attendees = relationship("EventAttendee", back_populates="event", cascade="all, delete-orphan")
